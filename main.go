@@ -150,7 +150,7 @@ type Config struct {
 	DirPath          string `json:"dirPath"`
 	DiffFileName     string `json:"diffFileName"`
 	PlaylistFileName string `json:"playlistFileName"`
-	ReplaceDiff      bool   `json:"recreateDiff"`
+	KeepHistory      bool   `json:"keepHistory"`
 }
 
 func newConfig() *Config {
@@ -214,18 +214,38 @@ func main() {
 		writeFile(playlist, *config, config.PlaylistFileName)
 		return
 	}
+
 	diff := playlist.subtract(oldPlaylist)
+
 	if diff.Playlist == nil {
-		log.Println("No diff nothing to do")
-		return
+		if len(playlist.Playlist) != len(oldPlaylist.Playlist) {
+			if config.KeepHistory {
+				fileName := fmt.Sprintf("%s_%s", oldPlaylist.UpdatedAt.Format(time.RFC3339), config.PlaylistFileName)
+				writeFile(&oldPlaylist, *config, fileName)
+				oldDiff, err := readPlaylistFromFile(*config, config.DiffFileName)
+				if err == nil {
+					diffFileName := fmt.Sprintf("%s_%s", oldDiff.UpdatedAt.Format(time.RFC3339), config.DiffFileName)
+					writeFile(&oldDiff, *config, diffFileName)
+					os.Remove(filepath.Join(config.DirPath, config.DiffFileName))
+				}
+			}
+			writeFile(playlist, *config, config.PlaylistFileName)
+			log.Println("Only new videos were found")
+			return
+		} else {
+			log.Println("No diff and no new videos nothing to do")
+			return
+		}
 	}
-
-	if len(playlist.Playlist) != len(oldPlaylist.Playlist) {
-		writeFile(playlist, *config, config.PlaylistFileName)
-		log.Println("Only new videos were found")
-		return
+	if config.KeepHistory {
+		fileName := fmt.Sprintf("%s_%s", oldPlaylist.UpdatedAt.Format(time.RFC3339), config.PlaylistFileName)
+		writeFile(&oldPlaylist, *config, fileName)
+		oldDiff, err := readPlaylistFromFile(*config, config.DiffFileName)
+		if err == nil {
+			diffFileName := fmt.Sprintf("%s_%s", oldDiff.UpdatedAt.Format(time.RFC3339), config.DiffFileName)
+			writeFile(&oldDiff, *config, diffFileName)
+		}
 	}
-
 	writeFile(playlist, *config, config.PlaylistFileName)
 	writeFile(diff, *config, config.DiffFileName)
 }
