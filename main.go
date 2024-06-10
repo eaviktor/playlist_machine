@@ -102,7 +102,7 @@ func fetchPlaylistItems(apiKey, playlistID, pageToken string) (*PlaylistItemsRes
 	return &response, nil
 }
 
-func writeFile(playlist *YoutubePlaylist, config Config, fileName string) {
+func writeFile(playlist *YoutubePlaylist, dirPath string, fileName string) {
 
 	jsonData, err := json.MarshalIndent(playlist, "", "  ")
 	if err != nil {
@@ -110,7 +110,7 @@ func writeFile(playlist *YoutubePlaylist, config Config, fileName string) {
 		return
 	}
 
-	filePath := filepath.Join(config.DirPath, fileName)
+	filePath := filepath.Join(dirPath, fileName)
 
 	file, err := os.Create(filePath)
 	if err != nil {
@@ -185,6 +185,17 @@ func newConfig() *Config {
 	return &config
 }
 
+func (config Config) saveHistory(oldDiff YoutubePlaylist, oldPlaylist YoutubePlaylist) {
+	fileName := fmt.Sprintf("%s_%s", oldPlaylist.UpdatedAt.Format(time.RFC3339), config.PlaylistFileName)
+	writeFile(&oldPlaylist, config.DirPath, fileName)
+	if oldDiff.Playlist != nil {
+		diffFileName := fmt.Sprintf("%s_%s", oldDiff.UpdatedAt.Format(time.RFC3339), config.DiffFileName)
+		writeFile(&oldDiff, config.DirPath, diffFileName)
+		os.Remove(filepath.Join(config.DirPath, config.DiffFileName))
+
+	}
+}
+
 func main() {
 	config := newConfig()
 	var videos []Video
@@ -209,9 +220,11 @@ func main() {
 	}
 	playlist := newPlaylist(videos)
 	oldPlaylist, err := readPlaylistFromFile(*config, config.PlaylistFileName)
+	oldDiff, _ := readPlaylistFromFile(*config, config.DiffFileName)
+
 	if err != nil {
 		log.Printf("Error fetching playlist %s a new playlist will be created", err)
-		writeFile(playlist, *config, config.PlaylistFileName)
+		writeFile(playlist, config.DirPath, config.PlaylistFileName)
 		return
 	}
 
@@ -220,32 +233,21 @@ func main() {
 	if diff.Playlist == nil {
 		if len(playlist.Playlist) != len(oldPlaylist.Playlist) {
 			if config.KeepHistory {
-				fileName := fmt.Sprintf("%s_%s", oldPlaylist.UpdatedAt.Format(time.RFC3339), config.PlaylistFileName)
-				writeFile(&oldPlaylist, *config, fileName)
-				oldDiff, err := readPlaylistFromFile(*config, config.DiffFileName)
-				if err == nil {
-					diffFileName := fmt.Sprintf("%s_%s", oldDiff.UpdatedAt.Format(time.RFC3339), config.DiffFileName)
-					writeFile(&oldDiff, *config, diffFileName)
-					os.Remove(filepath.Join(config.DirPath, config.DiffFileName))
-				}
+				config.saveHistory(oldDiff, oldPlaylist)
 			}
-			writeFile(playlist, *config, config.PlaylistFileName)
+			writeFile(playlist, config.DirPath, config.PlaylistFileName)
 			log.Println("Only new videos were found")
 			return
 		} else {
-			log.Println("No diff and no new videos nothing to do")
+			log.Println("No diff and no new videos, nothing to do")
 			return
 		}
 	}
+
 	if config.KeepHistory {
-		fileName := fmt.Sprintf("%s_%s", oldPlaylist.UpdatedAt.Format(time.RFC3339), config.PlaylistFileName)
-		writeFile(&oldPlaylist, *config, fileName)
-		oldDiff, err := readPlaylistFromFile(*config, config.DiffFileName)
-		if err == nil {
-			diffFileName := fmt.Sprintf("%s_%s", oldDiff.UpdatedAt.Format(time.RFC3339), config.DiffFileName)
-			writeFile(&oldDiff, *config, diffFileName)
-		}
+		config.saveHistory(oldDiff, oldPlaylist)
 	}
-	writeFile(playlist, *config, config.PlaylistFileName)
-	writeFile(diff, *config, config.DiffFileName)
+
+	writeFile(playlist, config.DirPath, config.PlaylistFileName)
+	writeFile(diff, config.DirPath, config.DiffFileName)
 }
