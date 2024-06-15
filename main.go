@@ -41,14 +41,18 @@ func newPlaylist(items []Video) *YoutubePlaylist {
 }
 
 func (p YoutubePlaylist) subtract(playlist YoutubePlaylist) *YoutubePlaylist {
-	playlistMap := make(map[string]struct{}, len(p.Playlist))
+	playlistMap := make(map[string]Video)
 	for _, video := range p.Playlist {
-		playlistMap[video.VideoId] = struct{}{}
+		playlistMap[video.VideoId] = video
 	}
 
 	var diff []Video
 	for _, video := range playlist.Playlist {
-		if _, found := playlistMap[video.VideoId]; !found {
+		v, found := playlistMap[video.VideoId]
+		if !found {
+			diff = append(diff, video)
+		}
+		if found && v.Title != video.Title && (v.Title == "Deleted video" || video.Title == "Deleted video") {
 			diff = append(diff, video)
 		}
 	}
